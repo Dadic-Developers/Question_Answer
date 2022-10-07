@@ -53,4 +53,4 @@ class QuestionSimilarity():
     def AnswerOfQuestion(self, qid, add_answers):
         answer_template = self.Answers[qid]
         return answer_template
-Q_sim = QuestionSimilarity()
+
