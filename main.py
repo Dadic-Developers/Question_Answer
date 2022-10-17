@@ -17,8 +17,8 @@ class QuestionSimilarity():
 
     def __DataLoading(self):
         df_Question = pd.read_excel(self.questions_path)
-        self.Questions = list(zip(df_Question.Question, df_Question.Add_Question, df_Question.Question_id,df_Question.Keyword))
-        self.Answers = dict(zip(df_Question.Question_id, df_Question.Answer))
+        self.Questions = list(zip(df_Question.Question, df_Question.Add_Question, df_Question.Question_id, df_Question.Keyword))
+        self.Answers = list(zip(df_Question.Question_id, df_Question.Answer, df_Question.Statement_Type))
         self.__doc_embedding = []
         for question in self.Questions:
 
@@ -35,22 +35,19 @@ class QuestionSimilarity():
             model_output = self.model(**encoded_input)
         message_embeddings=model_output[0]
         message_emb= message_embeddings.mean(axis=1).cpu().numpy()
-        scores=np.zeros((1,len(self.__doc_embedding)))
+        scores=np.zeros((1, len(self.__doc_embedding)))
         for j in range(len(self.__doc_embedding)):
             scores[0, j]=cosine_similarity(message_emb.mean(axis=0).reshape(1,-1),  self.__doc_embedding[j].mean(axis=0).reshape(1,-1))
 
         ls_dict=[]
         for k in range(len(self.Questions)):
              if scores[0][k]>0.5 :
-                print(k)
+                # print(k)
                 ds = {'Question_Id': self.Questions[k][2], 'Question_Added': self.Questions[k][1].split('،'),
-                         'Question_Score':scores[0][k], 'Question_Text':self.Questions[k][0]}
+                         'Question_Score':scores[0][k], 'Question_Text':self.Questions[k][0],
+                      'Answer': self.Answers[k][1], 'Statement_Type': self.Answers[k][2]}
                 ls_dict.append(ds)
         sorted_tuples = sorted(ls_dict,key=operator.itemgetter('Question_Score'),reverse=True)
         result = sorted_tuples[0:5]
         return result
-
-    def AnswerOfQuestion(self, qid, add_answers):
-        answer_template = self.Answers[qid]
-        return answer_template
 

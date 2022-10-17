@@ -16,8 +16,8 @@ def run():
         abort(405, description="NOT ALLOW")
     txt = request.json["message"]
     print(request.json["message"])
-    question = json.dumps(Q_sim.SimilarityCalculation(txt), ensure_ascii=False)
-    return jsonify({'Question_Recommend':question }), 200
+    question = Q_sim.SimilarityCalculation(txt)
+    return jsonify(question), 200
 
 
 # @app.route("/answer", methods=["POST"])
