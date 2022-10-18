@@ -43,11 +43,11 @@ class QuestionSimilarity():
         for k in range(len(self.Questions)):
              if scores[0][k]>0.5 :
                 # print(k)
-                ds = {'Question_Id': self.Questions[k][2], 'Question_Added': self.Questions[k][1].split('،'),
-                         'Question_Score':scores[0][k], 'Question_Text':self.Questions[k][0],
-                      'Answer': self.Answers[k][1], 'Statement_Type': self.Answers[k][2]}
+                ds = {'questionid': self.Questions[k][2], 'question_added': self.Questions[k][1].split('،'),
+                         'question_score':scores[0][k], 'question_text':self.Questions[k][0],
+                      'answer_text': self.Answers[k][1], 'Statement_type': self.Answers[k][2]}
                 ls_dict.append(ds)
-        sorted_tuples = sorted(ls_dict,key=operator.itemgetter('Question_Score'),reverse=True)
+        sorted_tuples = sorted(ls_dict,key=operator.itemgetter('question_score'),reverse=True)
         result = sorted_tuples[0:5]
         return result
 
