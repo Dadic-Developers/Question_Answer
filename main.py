@@ -64,7 +64,7 @@ class QuestionSimilarity():
         for k in range(len(self.Questions)):
              if scores[0][k]>0.5 :
                 # print(k)
-                ds = {'questionid': self.Questions[k][2], 'question_added': self.Questions[k][1].split('،'),
+                ds = {'question_id': self.Questions[k][2], 'question_added': self.Questions[k][1].split('،'),
                          'question_score':scores[0][k], 'question_text':self.Questions[k][0],
                       'answer_text': self.Answers[k][1], 'statement_type': self.Answers[k][2]}
                 ls_dict.append(ds)
