@@ -59,20 +59,16 @@ class QuestionSimilarity():
                     scores[0, j] += 0.02
             for key in self.Keywords[j]['phrase']:
                 if key in message:
-                        scores[0, j] += 0.12
+                        scores[0, j] += 0.13
         ls_dict=[]
         for k in range(len(self.Questions)):
-             if scores[0][k]>0.5 :
+             if scores[0][k]>0.75 :
                 # print(k)
-                ds = {'question_id': self.Questions[k][2], 'question_added': self.Questions[k][1].split('،'),
-                         'question_score':scores[0][k], 'question_text':self.Questions[k][0],
-                      'answer_text': self.Answers[k][1], 'statement_type': self.Answers[k][2]}
+                ds = {'questionid': self.Questions[k][2], 'question_added': self.Questions[k][1].split('،'),
+                         'question_score':scores[0][k], 'question_text':self.Questions[k][0],'question_keyword':self.Keywords[k],
+                      'answer_text': self.Answers[k][1], 'Statement_type': self.Answers[k][2]}
                 ls_dict.append(ds)
         sorted_tuples = sorted(ls_dict,key=operator.itemgetter('question_score'),reverse=True)
         result = sorted_tuples[0:5]
         return result
 
-# if __name__ == '__main__':
-#     txt = "آیا هزینه های خواروبار جز هزینه های مشمول مالیات خواهد بود؟"
-#     Q_sim = QuestionSimilarity()
-#     Q_sim.SimilarityCalculation(txt)
