@@ -5,6 +5,7 @@ from flask import abort
 from flask import json,Response
 from flask import jsonify
 from flask import request
+from http import HTTPStatus
 from main import QuestionSimilarity
 
 app = Flask(__name__)
@@ -16,12 +17,14 @@ def run():
         abort(405, description="NOT ALLOW")
     txt = request.json["message"]
     print(request.json["message"])
-    if len((txt).split()) > 5:
+    if len((txt).split()) >= 5:
         question = Q_sim.SimilarityCalculation(txt)
-        return jsonify(question), 200
+        if question:
+            return jsonify(question), 200
+        else:
+            return jsonify({'message': 'Result not found'}), 200
     else:
-        json_string = json.dumps({'message': 'لطفا متنی با طول بیش از پنج کلمه وارد کنید.'})
-        return Response(json_string, content_type="application/json; charset=utf-8")
+        return jsonify({'message': 'لطفا متنی با طول بیش از پنج کلمه وارد کنید.'}), 400
 
 
 
