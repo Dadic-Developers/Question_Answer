@@ -19,6 +19,7 @@ class QuestionSimilarity():
 
     def __DataLoading(self):
         df_Question = pd.read_excel(self.questions_path)
+        df_Question['Statement_Type'] = df_Question['Statement_Type'].replace({'لایحه 1': '1', 'ایحه 2': '2', 'ایحه 3': '3'})
         self.Questions = list(zip(df_Question.Question, df_Question.Add_Question, df_Question.Question_id))
         self.Answers = list(zip(df_Question.Question_id, df_Question.Answer, df_Question.Statement_Type))
         self.Keywords = self.__GetKeywords(df_Question.Keyword)
@@ -72,7 +73,7 @@ class QuestionSimilarity():
         result = sorted_tuples[0:5]
         return result
 
-# if __name__ == '__main__':
-#     txt = "آیا هزینه های خواروبار جز هزینه های مشمول مالیات خواهد بود؟"
-#     Q_sim = QuestionSimilarity()
-#     Q_sim.SimilarityCalculation(txt)
+if __name__ == '__main__':
+    txt = "آیا هزینه های خواروبار جز هزینه های مشمول مالیات خواهد بود؟"
+    Q_sim = QuestionSimilarity()
+    Q_sim.SimilarityCalculation(txt)
