@@ -1,7 +1,7 @@
 
 import pysolr
 
-solr_address = 'http://185.211.59.100:9997/solr/tax'
+solr_address = 'http://185.211.59.100:9997/solr/tax_similar_docs'
 solr_userName = 'solr'
 solr_password = 'Solr@123'
 

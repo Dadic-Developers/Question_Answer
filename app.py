@@ -1,11 +1,10 @@
 # !/usr/bin/python
 #_*_ coding=utf-8 _*_
+
 from flask import Flask
 from flask import abort
-from flask import json,Response
 from flask import jsonify
 from flask import request
-from http import HTTPStatus
 from main import QuestionSimilarity
 
 app = Flask(__name__)
@@ -25,7 +24,6 @@ def run():
             return jsonify({'message': 'Result not found'}), 200
     else:
         return jsonify({'message': 'لطفا متنی با طول بیش از پنج کلمه وارد کنید.'}), 400
-
 
 
 # @app.route("/answer", methods=["POST"])

@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import re
 import json
+import os
+import time
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import AutoTokenizer, AutoModel
 from SolrHandler import solr_getRelatedDocs, solr_commit
@@ -73,30 +75,9 @@ def similarity_calculation(main_docs, paragraphs_doc, paragraphs_pos, documents_
                                'score': "{:.2f}".format(final_score), 'similar_paragraphs': similar_paragraphs})
     return scores
 
-def save_docsInSolr(scores_dict):
-    documents = []
-    for doc in scores_dict:
-        for paragraph in doc['similar_paragraphs']:
-            paragraph['id1'] = doc['id1']
-            paragraph['id2'] = doc['id2']
-            paragraph['num1'] = doc['num1']
-            paragraph['num2'] = doc['num2']
-            paragraph['type1'] = doc['type1']
-            paragraph['type2'] = doc['type2']
-            paragraph['doc_score'] = doc['score']
-        documents.append(doc)
-    solr_commit(documents)
-    return documents
-
-def save_jsonFileInSolr(file_path):
-    file = open(file_path, 'r', encoding='utf-8')
-    js = json.load(file)
-    return save_docsInSolr(js)
-
-
-if __name__ == '__main__':
+def run_similarDocs2JSON():
     model, tokenizer = load_albertModel()
-    for clause_num in range(91, 288):
+    for clause_num in range(101, 288):
         documents = solr_getRelatedDocs(str(clause_num))
         paragraphs_data, paragraphs_pos = split_data2Paragraphs(documents, 'text_normalized')
         embeddings = get_paragraphEmbeddings(model, tokenizer, paragraphs_data)
@@ -104,3 +85,41 @@ if __name__ == '__main__':
         with open('similarity_docs/{}.json'.format(clause_num), 'w', encoding='utf-8') as fp:
             json.dump(similar_paragraphs, fp, ensure_ascii=False)
         print('The {}.json file writed'.format(clause_num))
+
+def save_docsInSolr(scores_dict, clause_num):
+    documents = []
+    for doc in scores_dict:
+        for paragraph in doc['similar_paragraphs']:
+            paragraph['id'] = '{}'.format(time.time())
+            paragraph['clause_num'] = clause_num
+            paragraph['id1'] = doc['id1']
+            paragraph['id2'] = doc['id2']
+            paragraph['num1'] = doc['num1']
+            paragraph['num2'] = doc['num2']
+            paragraph['type1'] = doc['type1']
+            paragraph['type2'] = doc['type2']
+            paragraph['doc_score'] = doc['score']
+            paragraph['pos_start1'] = paragraph['position1']['start']
+            paragraph['pos_end1'] = paragraph['position1']['end']
+            paragraph['pos_start2'] = paragraph['position2']['start']
+            paragraph['pos_end2'] = paragraph['position2']['end']
+            del paragraph['position1']
+            del paragraph['position2']
+            documents.append(paragraph)
+            time.sleep(.002)
+    solr_commit(documents)
+    return documents
+
+def save_jsonFileInSolr(file_path, clause_num):
+    file = open(file_path, 'r', encoding='utf-8')
+    js = json.load(file)
+    return save_docsInSolr(js, clause_num)
+
+
+if __name__ == '__main__':
+    root_path = 'similarity_docs/'
+    files = os.listdir(root_path)
+    for file in files:
+        if file.endswith('json'):
+            print(file)
+            save_jsonFileInSolr(root_path + file, file.replace('.json', ''))
