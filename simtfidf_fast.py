@@ -2,6 +2,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from string import digits
 import scipy.spatial.distance
 import pandas as pd
+import numpy as np
 from hazm import *
 import fasttext
 import re
@@ -61,19 +62,29 @@ for i in range(len(df_tfidf['top'])):
     doc_tfidf=' '.join(df_tfidf['top'][i])
     docs_features.append(doc_tfidf)
     document_vec.append(ft.get_sentence_vector(doc_tfidf))
+
+def get_top_tf_idf_words(response, top_n=2):
+    sorted_nzs = np.argsort(response.data)[:-(top_n+1):-1]
+    return feature_names[response.indices[sorted_nzs]]
+
 #Vectorize paragraph of documents
 doc_paragraph_vec=[]
+pr_docs=[]
 for i in range(len(documents)):
     paragraph_vec=[]
+    pr_doc=[]
     for j in range(len(documents[i])):
-        response = tfidf.transform([documents[i][j]])
-        feature_names = tfidf.get_feature_names()
-        pr = []
-        for col in response.nonzero()[1]:
-            pr.append(feature_names[col])
-        paragraph_doc = ' '.join(pr)
-        paragraph_vec.append(ft.get_sentence_vector(paragraph_doc))
+        if len(documents[i][j])>50:
+            feature_names = np.array(tfidf.get_feature_names())
+            responses = tfidf.transform([documents[i][j]])
+            out = [get_top_tf_idf_words(response, 10) for response in responses]
+            out=out[0].tolist()
+            paragraph_doc = ' '.join(out)
+            if len(out)>5:
+                pr_doc.append(paragraph_doc)
+                paragraph_vec.append(ft.get_sentence_vector(paragraph_doc))
     doc_paragraph_vec.append(paragraph_vec)
+    pr_docs.append(pr_doc)
 #calculate similarity documents
 similar_docs=[]
 for i in range(len(data)):
@@ -86,14 +97,14 @@ df=pd.DataFrame(similar_docs)
 df.to_excel('result_doctf75.xlsx')
 #Calculate Similarity Paragraph of Documents with each other
 similar_paragraphs = []
-for i in range(len(documents)):
-    root_doc = documents[i]
-    for j in range(min(i+1,len(documents)), len(documents)):
-            candidate_doc = documents[j]
+for i in range(len(pr_docs)):
+    root_doc = pr_docs[i]
+    for j in range(min(i+1,len(pr_docs)), len(pr_docs)):
+            candidate_doc = pr_docs[j]
             for k in range(len(root_doc)):
                 for h in range(len(candidate_doc)):
                    score = 1-scipy.spatial.distance.cosine(doc_paragraph_vec[i][k],  doc_paragraph_vec[j][h])
                    if score > 0.8 :
-                        ds = {'id1': i, 'id2': j,'score':score[0][0]}
+                        ds = {'id1': i, 'id2': j,'paragraph-1':pr_docs[i][k],'paragraph-2':pr_docs[j][h],'score':score}
                         similar_paragraphs.append(ds)
 
