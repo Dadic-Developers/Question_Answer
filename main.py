@@ -14,7 +14,7 @@ class QuestionSimilarity():
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name)
         self.questions_path="Question.xlsx"
-        self.stop_words = pd.read_csv(root_path + '/Stopwords.txt')['SW'].tolist()
+        self.stop_words = pd.read_csv(root_path + '/stop_words.txt')['SW'].tolist()
         self.__DataLoading()
 
     def __DataLoading(self):

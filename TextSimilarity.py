@@ -5,12 +5,16 @@ import re
 import json
 import os
 import time
+from string import digits
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import AutoTokenizer, AutoModel
 from SolrHandler import solr_getRelatedDocs, solr_commit
 
 ParagraphSimilarity_Threshold = 0.9
 TextCharacter_MinLenght = 50
+MaxWordsCount_InDoc = 10
+stop_word_doc = pd.read_csv("stop_words.txt")['sw'].tolist()
 
 
 def load_albertModel():
@@ -18,6 +22,28 @@ def load_albertModel():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModel.from_pretrained(model_name)
     return model, tokenizer
+
+def load_tfIdfVectorize():
+    docs = None
+    tfidf = TfidfVectorizer(min_df=0.1, max_df=0.7, stop_words=stop_word_doc)
+    X_tfidf = tfidf.fit_transform(docs).toarray()
+    vocab = tfidf.vocabulary_
+    reverse_vocab = {v: k for k, v in vocab.items()}
+    feature_names = tfidf.get_feature_names()
+    df_tfidf = pd.DataFrame(X_tfidf, columns=feature_names)
+    idx = X_tfidf.argsort(axis=1)
+    tfidf_max = idx[:, -MaxWordsCount_InDoc:]
+
+def clean(text):
+    # normalizer = Normalizer()
+    # Remove Punctuation
+    text = re.sub(r'''\W+''', ' ', text, flags=re.VERBOSE)
+    text = re.sub(r'[«»،]', ' ', text)
+    remove_digits = str.maketrans('', '', digits)
+    text = text.translate(remove_digits)
+    text = re.sub(r'[a-zA-Z]', '', text)
+    text = re.sub(r"\s+", ' ', text)
+    return text
 
 def split_data2Paragraphs(documents, text_field):
     paragraphs_docs = []
@@ -38,6 +64,25 @@ def get_paragraphEmbeddings(model, tokenizer, paragraphs):
     documents_embedding=[]
     for doc in paragraphs:
         doc_embedding=[]
+        for para in doc:
+            encoded_data = tokenizer(para, padding=True, truncation=True, return_tensors='pt')
+            try:
+                with torch.no_grad():
+                    model_output = model(**encoded_data)
+            except Exception as error:
+                print(error)
+                print(para)
+            data_embeddings = model_output[0]
+            doc_embedding.append(data_embeddings.mean(axis=1).cpu().numpy())
+        documents_embedding.append(doc_embedding)
+    print('Embedding extraction is done!')
+    return documents_embedding
+
+def get_paragraphFastTextVectors(model, paragraphs):
+    documents_embedding=[]
+    for doc in paragraphs:
+        doc_embedding=[]
+        doc_tfidf = [reverse_vocab.get(item) for item in row]
         for para in doc:
             encoded_data = tokenizer(para, padding=True, truncation=True, return_tensors='pt')
             try:
