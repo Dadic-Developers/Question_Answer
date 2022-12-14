@@ -3,169 +3,202 @@ import numpy as np
 import torch
 import re
 import json
-import os
+import pickle
 import time
+import string
 from string import digits
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import AutoTokenizer, AutoModel
-from SolrHandler import solr_getRelatedDocs, solr_commit
+import fasttext
+from SolrHandler import solr_getRelatedDocs, solr_commit, solr_getAllTextDocs
 
-ParagraphSimilarity_Threshold = 0.9
-TextCharacter_MinLenght = 50
-MaxWordsCount_InDoc = 10
-stop_word_doc = pd.read_csv("stop_words.txt")['sw'].tolist()
+class DocumentsSimilarity():
 
+    def __init__(self, method='tfidf'):
+        self.VectorizationMethod = method
+        self.__ParagraphSimilarity_Threshold = 0.9
+        self.__TextCharacter_MinLenght = 50
+        self.__MaxWordsCount_InDoc = 30
+        self.__MaxWordsCount_InParagraph = 10
+        if self.VectorizationMethod == 'tfidf':
+            self.__load_tfIdfVectorize()
+            print('The TF-IDF model is created')
+            self.__fasttext = fasttext.load_model('tfidf_data/cc.fa.300.bin')
+            print('The fasttext model is loaded')
+        elif self.VectorizationMethod == 'albert':
+            self.__load_albertModel()
 
-def load_albertModel():
-    model_name = 'Albert-persiannews'
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name)
-    return model, tokenizer
+    def __load_albertModel(self):
+        model_name = 'Albert-persiannews'
+        self.__albert_tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.__albert_model = AutoModel.from_pretrained(model_name)
 
-def load_tfIdfVectorize():
-    docs = None
-    tfidf = TfidfVectorizer(min_df=0.1, max_df=0.7, stop_words=stop_word_doc)
-    X_tfidf = tfidf.fit_transform(docs).toarray()
-    vocab = tfidf.vocabulary_
-    reverse_vocab = {v: k for k, v in vocab.items()}
-    feature_names = tfidf.get_feature_names()
-    df_tfidf = pd.DataFrame(X_tfidf, columns=feature_names)
-    idx = X_tfidf.argsort(axis=1)
-    tfidf_max = idx[:, -MaxWordsCount_InDoc:]
+    def __load_tfIdfVectorize(self):
+        stop_words = pd.read_csv("stop_words.txt")['sw'].tolist()
+        self.__tfidf = TfidfVectorizer(min_df=0.01, max_df=0.8, stop_words=stop_words, preprocessor=self.__clean_textData)
+        corpus = pickle.load(open('tfidf_data/tfidf_corpus.pkl', 'rb'))
+        self.__tfidf.fit_transform(corpus).toarray()
+        self.__all_words = self.__tfidf.get_feature_names()
 
-def clean(text):
-    # normalizer = Normalizer()
-    # Remove Punctuation
-    text = re.sub(r'''\W+''', ' ', text, flags=re.VERBOSE)
-    text = re.sub(r'[«»،]', ' ', text)
-    remove_digits = str.maketrans('', '', digits)
-    text = text.translate(remove_digits)
-    text = re.sub(r'[a-zA-Z]', '', text)
-    text = re.sub(r"\s+", ' ', text)
-    return text
+    def __create_rulesCorpus(self):
+        docs = solr_getAllTextDocs()
+        corpus = []
+        for doc in docs:
+            text = ''
+            if 'subject_normalized' in doc:
+                text = doc['subject_normalized']
+            text += '\n\n' + doc['text_normalized']
+            corpus.append(text)
+        file = open('tfidf_data/tfidf_corpus.pkl', 'wb')
+        pickle.dump(corpus, file)
+        file.close()
 
-def split_data2Paragraphs(documents, text_field):
-    paragraphs_docs = []
-    paragraphs_pos = []
-    for doc in documents:
-        content = re.split('[.:\n]', doc[text_field])
-        clean_list = [x for x in content if len(x) > TextCharacter_MinLenght and x != 'nan']
-        pos = []
-        for txt in clean_list:
-            start = doc[text_field].index(txt),
-            pos.append({'start': start[0], 'end': start[0] + len(txt) - 1})
-        paragraphs_docs.append(clean_list)
-        paragraphs_pos.append(pos)
-    print('The related documents size: ', len(paragraphs_docs))
-    return paragraphs_docs, paragraphs_pos
+    def __clean_textData(self, text):
+        if text:
+            text = text.translate(str.maketrans(string.punctuation, ' ' * len(string.punctuation)))
+            text = re.sub(r'[«»،؛؟]', ' ', text)
+            remove_digits = str.maketrans('', '', digits)
+            text = text.translate(remove_digits)
+            text = re.sub(r'[a-zA-Z۰-۹]', '', text)
+            text = re.sub(r"\s+", ' ', text)
+        return text
 
-def get_paragraphEmbeddings(model, tokenizer, paragraphs):
-    documents_embedding=[]
-    for doc in paragraphs:
-        doc_embedding=[]
-        for para in doc:
-            encoded_data = tokenizer(para, padding=True, truncation=True, return_tensors='pt')
-            try:
-                with torch.no_grad():
-                    model_output = model(**encoded_data)
-            except Exception as error:
-                print(error)
-                print(para)
-            data_embeddings = model_output[0]
-            doc_embedding.append(data_embeddings.mean(axis=1).cpu().numpy())
-        documents_embedding.append(doc_embedding)
-    print('Embedding extraction is done!')
-    return documents_embedding
+    def split_data2Paragraphs(self, documents, text_field):
+        paragraphs_docs = []
+        paragraphs_pos = []
+        for doc in documents:
+            content = re.split('[.:\n]', doc[text_field])
+            clean_list = [x for x in content if len(x) > self.__TextCharacter_MinLenght and x != 'nan']
+            pos = []
+            for txt in clean_list:
+                start = doc[text_field].index(txt),
+                pos.append({'start': start[0], 'end': start[0] + len(txt) - 1})
+            paragraphs_docs.append(clean_list)
+            paragraphs_pos.append(pos)
+        print('The related documents size: ', len(paragraphs_docs))
+        return paragraphs_docs, paragraphs_pos
 
-def get_paragraphFastTextVectors(model, paragraphs):
-    documents_embedding=[]
-    for doc in paragraphs:
-        doc_embedding=[]
-        doc_tfidf = [reverse_vocab.get(item) for item in row]
-        for para in doc:
-            encoded_data = tokenizer(para, padding=True, truncation=True, return_tensors='pt')
-            try:
-                with torch.no_grad():
-                    model_output = model(**encoded_data)
-            except Exception as error:
-                print(error)
-                print(para)
-            data_embeddings = model_output[0]
-            doc_embedding.append(data_embeddings.mean(axis=1).cpu().numpy())
-        documents_embedding.append(doc_embedding)
-    print('Embedding extraction is done!')
-    return documents_embedding
+    def get_paragraphEmbeddings(self, docs_paragraphs):
+        documents_embedding = []
+        for doc in docs_paragraphs:
+            paragraphs_embedding = []
+            for paragraph in doc:
+                encoded_data = self.__albert_tokenizer(paragraph, padding=True, truncation=True, return_tensors='pt')
+                try:
+                    with torch.no_grad():
+                        model_output = self.__albert_model(**encoded_data)
+                except Exception as error:
+                    print(error)
+                    print(paragraph)
+                paragraphs_embedding.append(model_output[0].mean(axis=1).cpu().numpy())
+            documents_embedding.append((paragraphs_embedding,))
+        print('Embedding extraction is done!')
+        return documents_embedding
 
-def similarity_calculation(main_docs, paragraphs_doc, paragraphs_pos, documents_embedding):
-    scores = []
-    for i in range(len(documents_embedding)):
-        root_emb = documents_embedding[i]
-        for j in range(i+1, len(documents_embedding)):
-            if i+1 < len(documents_embedding):
-                sum_score = []
-                similar_paragraphs = []
-                candidate_emb = documents_embedding[j]
-                for k in range(len(root_emb)):
-                    for h in range(len(candidate_emb)):
-                       score = cosine_similarity(root_emb[k].mean(axis=0).reshape(1,-1),  candidate_emb[h].mean(axis=0).reshape(1,-1))
-                       sum_score.append(score)
-                       if score > ParagraphSimilarity_Threshold :
-                            ds = {'text1': paragraphs_doc[i][k], 'text2': paragraphs_doc[j][h], 'position1': paragraphs_pos[i][k],
-                                  'position2': paragraphs_pos[j][h], 'score':"{:.2f}".format(score[0][0])}
-                            similar_paragraphs.append(ds)
-                final_score = np.mean(sum_score)
-                scores.append({'id1': main_docs[i]['id'], 'id2': main_docs[j]['id'], 'num1': main_docs[i]['num'][0] if 'num' in main_docs[i] else '',
-                               'num2': main_docs[j]['num'][0] if 'num' in main_docs[j] else '', 'type1': main_docs[i]['type'], 'type2': main_docs[j]['type'],
-                               'score': "{:.2f}".format(final_score), 'similar_paragraphs': similar_paragraphs})
-    return scores
+    def __get_topTFIDFWords(self, text, max_words):
+        vec_tfidf = self.__tfidf.transform(text)
+        vec_tfidf.data.sort()
+        size = len(vec_tfidf.data)
+        start = size - max_words if size > max_words else 0
+        indexes = vec_tfidf.indices[start:size]
+        top_words = [self.__all_words[i] for i in indexes]
+        return ' '.join(top_words)
 
-def run_similarDocs2JSON(clause_num):
-    documents = solr_getRelatedDocs(str(clause_num))
-    paragraphs_data, paragraphs_pos = split_data2Paragraphs(documents, 'text_normalized')
-    embeddings = get_paragraphEmbeddings(model, tokenizer, paragraphs_data)
-    similar_paragraphs = similarity_calculation(documents, paragraphs_data, paragraphs_pos, embeddings)
-    with open('similarity_docs/{}.json'.format(clause_num), 'w', encoding='utf-8') as fp:
-        json.dump(similar_paragraphs, fp, ensure_ascii=False)
-    print('The {}.json file writed'.format(clause_num))
+    def get_paragraphTFIDf_FastTextVectors(self, docs_paragraphs):
+        documents_embedding=[]
+        for doc in docs_paragraphs:
+            doc_tfidf = self.__get_topTFIDFWords(['\n'.join(doc)], self.__MaxWordsCount_InDoc)
+            doc_embedding = self.__fasttext.get_sentence_vector(doc_tfidf)
+            paragraphs_embedding = []
+            for paragraph in doc:
+                para_tfidf = self.__get_topTFIDFWords([paragraph], self.__MaxWordsCount_InParagraph)
+                ft_embedding = self.__fasttext.get_sentence_vector(para_tfidf)
+                paragraphs_embedding.append(ft_embedding)
+            documents_embedding.append((paragraphs_embedding, doc_embedding))
+        print('Embedding extraction is done!')
+        return documents_embedding
 
-def save_docsInSolr(scores_dict, clause_num):
-    documents = []
-    for doc in scores_dict:
-        for paragraph in doc['similar_paragraphs']:
-            paragraph['id'] = '{}'.format(time.time())
-            paragraph['clause_num'] = clause_num
-            paragraph['id1'] = doc['id1']
-            paragraph['id2'] = doc['id2']
-            paragraph['num1'] = doc['num1']
-            paragraph['num2'] = doc['num2']
-            paragraph['type1'] = doc['type1']
-            paragraph['type2'] = doc['type2']
-            paragraph['doc_score'] = doc['score']
-            paragraph['pos_start1'] = paragraph['position1']['start']
-            paragraph['pos_end1'] = paragraph['position1']['end']
-            paragraph['pos_start2'] = paragraph['position2']['start']
-            paragraph['pos_end2'] = paragraph['position2']['end']
-            del paragraph['position1']
-            del paragraph['position2']
-            documents.append(paragraph)
-            time.sleep(.002)
-    solr_commit(documents)
-    return documents
+    def similarity_calculation(self, main_docs, paragraphs_doc, paragraphs_pos, documents_embedding):
+        scores = []
+        for i in range(len(documents_embedding)):
+            root_emb = documents_embedding[i][0]
+            for j in range(i+1, len(documents_embedding)):
+                if i+1 < len(documents_embedding):
+                    sum_score = []
+                    similar_paragraphs = []
+                    candidate_emb = documents_embedding[j][0]
+                    for k in range(len(root_emb)):
+                        for h in range(len(candidate_emb)):
+                            if self.VectorizationMethod == 'albert':
+                                score = cosine_similarity(root_emb[k].mean(axis=0).reshape(1,-1),  candidate_emb[h].mean(axis=0).reshape(1,-1))
+                            elif self.VectorizationMethod == 'tfidf':
+                                score = cosine_similarity(root_emb[k].reshape(1, -1), candidate_emb[h].reshape(1, -1))
+                            sum_score.append(score)
+                            if score > self.__ParagraphSimilarity_Threshold:
+                                ds = {'text1': paragraphs_doc[i][k], 'text2': paragraphs_doc[j][h], 'position1': paragraphs_pos[i][k],
+                                      'position2': paragraphs_pos[j][h], 'score':"{:.2f}".format(score[0][0])}
+                                similar_paragraphs.append(ds)
+                    if self.VectorizationMethod == 'albert':
+                        final_score = np.mean(sum_score)
+                    elif self.VectorizationMethod == 'tfidf':
+                        final_score = cosine_similarity(documents_embedding[i][1].reshape(1, -1),  documents_embedding[j][1].reshape(1, -1))[0][0]
+                    scores.append({'id1': main_docs[i]['id'], 'id2': main_docs[j]['id'], 'num1': main_docs[i]['num'][0] if 'num' in main_docs[i] else '',
+                                   'num2': main_docs[j]['num'][0] if 'num' in main_docs[j] else '', 'type1': main_docs[i]['type'], 'type2': main_docs[j]['type'],
+                                   'score': "{:.2f}".format(final_score), 'similar_paragraphs': similar_paragraphs})
+            print('SimilarityCalc - RootDoc: {}'.format(i))
+        return scores
 
-def save_jsonFileInSolr(file_path, clause_num):
-    file = open(file_path, 'r', encoding='utf-8')
-    js = json.load(file)
-    return save_docsInSolr(js, clause_num)
+    def run_similarDocs2JSON(self, clause_num):
+        documents = solr_getRelatedDocs(str(clause_num))
+        paragraphs_data, paragraphs_pos = self.split_data2Paragraphs(documents, 'text_normalized')
+        if self.VectorizationMethod == 'tfidf':
+            embeddings = self.get_paragraphTFIDf_FastTextVectors(paragraphs_data)
+        elif self.VectorizationMethod == 'albert':
+            embeddings = self.get_paragraphEmbeddings(paragraphs_data)
+        similar_paragraphs = self.similarity_calculation(documents, paragraphs_data, paragraphs_pos, embeddings)
+        with open('similarity_docs/{}.json'.format(clause_num), 'w', encoding='utf-8') as fp:
+            json.dump(similar_paragraphs, fp, ensure_ascii=False)
+        print('The {}.json file writed'.format(clause_num))
+
+    def save_docsInSolr(self, scores_dict, clause_num):
+        documents = []
+        for doc in scores_dict:
+            for paragraph in doc['similar_paragraphs']:
+                paragraph['id'] = '{}'.format(time.time())
+                paragraph['clause_num'] = clause_num
+                paragraph['id1'] = doc['id1']
+                paragraph['id2'] = doc['id2']
+                paragraph['num1'] = doc['num1']
+                paragraph['num2'] = doc['num2']
+                paragraph['type1'] = doc['type1']
+                paragraph['type2'] = doc['type2']
+                paragraph['doc_score'] = doc['score']
+                paragraph['pos_start1'] = paragraph['position1']['start']
+                paragraph['pos_end1'] = paragraph['position1']['end']
+                paragraph['pos_start2'] = paragraph['position2']['start']
+                paragraph['pos_end2'] = paragraph['position2']['end']
+                del paragraph['position1']
+                del paragraph['position2']
+                documents.append(paragraph)
+                time.sleep(.002)
+        solr_commit(documents)
+        return documents
+
+    def save_jsonFileInSolr(self, file_path, clause_num):
+        file = open(file_path, 'r', encoding='utf-8')
+        js = json.load(file)
+        return self.save_docsInSolr(js, clause_num)
 
 
 if __name__ == '__main__':
-    model, tokenizer = load_albertModel()
-    for clause_num in ['90']:
-        run_similarDocs2JSON(clause_num)
+    ds = DocumentsSimilarity(method='tfidf')
+    for clause_num in ['2']:
+        ds.run_similarDocs2JSON(clause_num)
     # root_path = 'similarity_docs/'
+    # import os
     # files = os.listdir(root_path)
     # for file in files:
     #     if file.endswith('json'):
-    #         print(file)
-    #         save_jsonFileInSolr(root_path + file, file.replace('.json', ''))
+            # print(file)
+            # ds.save_jsonFileInSolr(root_path + file, file.replace('.json', ''))

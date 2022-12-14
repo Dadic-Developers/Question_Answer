@@ -3,3 +3,4 @@ __pycache__
 venv
 Albert-persiannews
 similarity_docs
+tfidf_data/cc.fa.300.bin

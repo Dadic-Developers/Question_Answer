@@ -10,20 +10,11 @@ import re
 ft = fasttext.load_model('/home/ubuntu/mehrdad/cc.fa.300.bin')
 
 def clean(text):
-    normalizer = Normalizer()
-    # Remove Punctuation
-    text = re.sub(r'''      # Start raw string block
-               \W+       # Accept one or more non-word characters
-               ''',  # Close string block
-                  ' ',  # and replace it with a single space
-                  text,
-                  flags=re.VERBOSE)
-
+    # normalizer = Normalizer()
+    text = re.sub(r''' \W+''', ' ', text, flags=re.VERBOSE)
     text = re.sub(r'[«»،]', ' ', text)
-    # Remove Numbers
     remove_digits = str.maketrans('', '', digits)
     text = text.translate(remove_digits)
-    # Remove English Character
     text = re.sub(r'[a-zA-Z]', '', text)
     text = re.sub(r"\s+", ' ', text)
     return text
@@ -51,10 +42,10 @@ X_tfidf = tfidf.fit_transform(docs).toarray()
 vocab = tfidf.vocabulary_
 reverse_vocab = {v:k for k,v in vocab.items()}
 feature_names = tfidf.get_feature_names()
-df_tfidf = pd.DataFrame(X_tfidf, columns = feature_names)
+df_tfidf = pd.DataFrame(X_tfidf, columns=feature_names)
 idx = X_tfidf.argsort(axis=1)
 tfidf_max = idx[:,-10:]
-df_tfidf['top'] = [[reverse_vocab.get(item) for item in row] for row in tfidf_max ]
+df_tfidf['top'] = [[reverse_vocab.get(item) for item in row] for row in tfidf_max]
 
 docs_features=[]
 document_vec=[]
