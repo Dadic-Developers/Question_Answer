@@ -70,21 +70,19 @@ def similarity_calculation(main_docs, paragraphs_doc, paragraphs_pos, documents_
                                   'position2': paragraphs_pos[j][h], 'score':"{:.2f}".format(score[0][0])}
                             similar_paragraphs.append(ds)
                 final_score = np.mean(sum_score)
-                scores.append({'id1': main_docs[i]['id'], 'id2': main_docs[j]['id'], 'num1': main_docs[i]['num'][0],
-                               'num2': main_docs[j]['num'][0], 'type1': main_docs[i]['type'], 'type2': main_docs[j]['type'],
+                scores.append({'id1': main_docs[i]['id'], 'id2': main_docs[j]['id'], 'num1': main_docs[i]['num'][0] if 'num' in main_docs[i] else '',
+                               'num2': main_docs[j]['num'][0] if 'num' in main_docs[j] else '', 'type1': main_docs[i]['type'], 'type2': main_docs[j]['type'],
                                'score': "{:.2f}".format(final_score), 'similar_paragraphs': similar_paragraphs})
     return scores
 
-def run_similarDocs2JSON():
-    model, tokenizer = load_albertModel()
-    for clause_num in range(101, 288):
-        documents = solr_getRelatedDocs(str(clause_num))
-        paragraphs_data, paragraphs_pos = split_data2Paragraphs(documents, 'text_normalized')
-        embeddings = get_paragraphEmbeddings(model, tokenizer, paragraphs_data)
-        similar_paragraphs = similarity_calculation(documents, paragraphs_data, paragraphs_pos, embeddings)
-        with open('similarity_docs/{}.json'.format(clause_num), 'w', encoding='utf-8') as fp:
-            json.dump(similar_paragraphs, fp, ensure_ascii=False)
-        print('The {}.json file writed'.format(clause_num))
+def run_similarDocs2JSON(clause_num):
+    documents = solr_getRelatedDocs(str(clause_num))
+    paragraphs_data, paragraphs_pos = split_data2Paragraphs(documents, 'text_normalized')
+    embeddings = get_paragraphEmbeddings(model, tokenizer, paragraphs_data)
+    similar_paragraphs = similarity_calculation(documents, paragraphs_data, paragraphs_pos, embeddings)
+    with open('similarity_docs/{}.json'.format(clause_num), 'w', encoding='utf-8') as fp:
+        json.dump(similar_paragraphs, fp, ensure_ascii=False)
+    print('The {}.json file writed'.format(clause_num))
 
 def save_docsInSolr(scores_dict, clause_num):
     documents = []
@@ -117,9 +115,12 @@ def save_jsonFileInSolr(file_path, clause_num):
 
 
 if __name__ == '__main__':
-    root_path = 'similarity_docs/'
-    files = os.listdir(root_path)
-    for file in files:
-        if file.endswith('json'):
-            print(file)
-            save_jsonFileInSolr(root_path + file, file.replace('.json', ''))
+    model, tokenizer = load_albertModel()
+    for clause_num in ['90']:
+        run_similarDocs2JSON(clause_num)
+    # root_path = 'similarity_docs/'
+    # files = os.listdir(root_path)
+    # for file in files:
+    #     if file.endswith('json'):
+    #         print(file)
+    #         save_jsonFileInSolr(root_path + file, file.replace('.json', ''))
