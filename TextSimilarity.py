@@ -15,12 +15,14 @@ from SolrHandler import solr_getRelatedDocs, solr_commit, solr_getAllTextDocs
 
 class DocumentsSimilarity():
 
-    def __init__(self, method='tfidf'):
-        self.VectorizationMethod = method
-        self.__ParagraphSimilarity_Threshold = 0.9
-        self.__TextCharacter_MinLenght = 50
-        self.__MaxWordsCount_InDoc = 30
-        self.__MaxWordsCount_InParagraph = 10
+    def __init__(self, vectorization_method='tfidf', para_sim_threshold=0.8, min_txt_len=50,
+                        max_doc_word_count=30, max_para_word_count=10, min_para_word=4):
+        self.VectorizationMethod = vectorization_method
+        self.__ParagraphSimilarity_Threshold = para_sim_threshold
+        self.__TextCharacter_MinLenght = min_txt_len
+        self.__MaxWordsCount_InDoc = max_doc_word_count
+        self.__MaxWordsCount_InParagraph = max_para_word_count
+        self.__MinTopWords_InParagraph = min_para_word
         if self.VectorizationMethod == 'tfidf':
             self.__load_tfIdfVectorize()
             print('The TF-IDF model is created')
@@ -103,17 +105,20 @@ class DocumentsSimilarity():
         start = size - max_words if size > max_words else 0
         indexes = vec_tfidf.indices[start:size]
         top_words = [self.__all_words[i] for i in indexes]
-        return ' '.join(top_words)
+        return top_words
 
     def get_paragraphTFIDf_FastTextVectors(self, docs_paragraphs):
         documents_embedding=[]
         for doc in docs_paragraphs:
             doc_tfidf = self.__get_topTFIDFWords(['\n'.join(doc)], self.__MaxWordsCount_InDoc)
-            doc_embedding = self.__fasttext.get_sentence_vector(doc_tfidf)
+            doc_embedding = self.__fasttext.get_sentence_vector(' '.join(doc_tfidf))
             paragraphs_embedding = []
             for paragraph in doc:
                 para_tfidf = self.__get_topTFIDFWords([paragraph], self.__MaxWordsCount_InParagraph)
-                ft_embedding = self.__fasttext.get_sentence_vector(para_tfidf)
+                if len(para_tfidf) > self.__MinTopWords_InParagraph:
+                    ft_embedding = self.__fasttext.get_sentence_vector(' '.join(para_tfidf))
+                else:
+                    ft_embedding = None
                 paragraphs_embedding.append(ft_embedding)
             documents_embedding.append((paragraphs_embedding, doc_embedding))
         print('Embedding extraction is done!')
@@ -132,9 +137,11 @@ class DocumentsSimilarity():
                         for h in range(len(candidate_emb)):
                             if self.VectorizationMethod == 'albert':
                                 score = cosine_similarity(root_emb[k].mean(axis=0).reshape(1,-1),  candidate_emb[h].mean(axis=0).reshape(1,-1))
+                                sum_score.append(score)
                             elif self.VectorizationMethod == 'tfidf':
-                                score = cosine_similarity(root_emb[k].reshape(1, -1), candidate_emb[h].reshape(1, -1))
-                            sum_score.append(score)
+                                score = 0.0
+                                if root_emb[k] and candidate_emb[h]:
+                                    score = cosine_similarity(root_emb[k].reshape(1, -1), candidate_emb[h].reshape(1, -1))
                             if score > self.__ParagraphSimilarity_Threshold:
                                 ds = {'text1': paragraphs_doc[i][k], 'text2': paragraphs_doc[j][h], 'position1': paragraphs_pos[i][k],
                                       'position2': paragraphs_pos[j][h], 'score':"{:.2f}".format(score[0][0])}

@@ -25,12 +25,3 @@ def solr_getAllTextDocs():
     fields = 'subject_normalized,text_normalized'
     response = solr.search('*:*', rows=10000, fl=fields)
     return response.docs
-
-
-
-
-if __name__ == '__main__':
-
-    # corpus = pickle.load(file)
-    file.close()
-    print(len(corpus))
