@@ -10,7 +10,7 @@ from string import digits
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import AutoTokenizer, AutoModel
-import fasttext
+# import fasttext
 from SolrHandler import solr_getRelatedDocs, solr_commit, solr_getAllTextDocs
 
 class DocumentsSimilarity():
@@ -26,7 +26,8 @@ class DocumentsSimilarity():
         if self.VectorizationMethod == 'tfidf':
             self.__load_tfIdfVectorize()
             print('The TF-IDF model is created')
-            self.__fasttext = fasttext.load_model('tfidf_data/cc.fa.300.bin')
+            # self.__fasttext = fasttext.load_model('tfidf_data/cc.fa.300.bin')
+            self.__fasttext = None
             print('The fasttext model is loaded')
         elif self.VectorizationMethod == 'albert':
             self.__load_albertModel()
@@ -199,9 +200,9 @@ class DocumentsSimilarity():
 
 
 if __name__ == '__main__':
-    ds = DocumentsSimilarity(method='tfidf')
-    for clause_num in ['2']:
-        ds.run_similarDocs2JSON(clause_num)
+    ds = DocumentsSimilarity(vectorization_method='albert', para_sim_threshold=0.9,)
+    for clause_num in range(2,283):
+        ds.run_similarDocs2JSON(str(clause_num))
     # root_path = 'similarity_docs/'
     # import os
     # files = os.listdir(root_path)
